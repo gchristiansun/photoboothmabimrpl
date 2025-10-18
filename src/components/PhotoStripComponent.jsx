@@ -193,15 +193,19 @@ export default function PhotoStripComposer() {
 
 
   function downloadComposite() {
-    const canvas = canvasRef.current 
-    if (!canvas) return
-    const dataUrl = canvas.toDataURL('image/png') 
-    const name = fileName || 'photo-strip'; 
-    const a = document.createElement('a')
-    a.href = dataUrl
-    a.download = name.endsWith('.png') ? name : name + '.png';
-    a.click()
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // ubah ke JPEG dan turunkan kualitas (0.7 = 70%)
+    const dataUrl = canvas.toDataURL('image/jpeg');
+
+    const name = fileName || 'photo-strip';
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = name.endsWith('.jpg') ? name : name + '.jpg';
+    a.click();
   }
+
 
   return (
     <div className='flex w-screen overflow-x-hidden bg-white'>
