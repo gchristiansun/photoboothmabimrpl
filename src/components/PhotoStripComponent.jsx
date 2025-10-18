@@ -10,11 +10,16 @@ export default function PhotoStripComposer() {
   const [canvasSize, setCanvasSize] = useState({ w: 800, h: 1200 })
   const [slots, setSlots] = useState([]) // otomatis dari area bolong
   const [activeSlotIndex, setActiveSlotIndex] = useState(null)
+  // const [editingSlot, setEditingSlot] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
+
 
   const frameCategories = {
     "3x": [
       { name: "Frame 3x - 1", src: "3x/frame3x-1.png", json: "3x/frame3x-1.png.json" },
       { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-2.png.json" },
+      
     ],
     "6x": [
       { name: "Frame 6x - 1", src: "6x/frame6x-1.png", json: "6x/frame6x-1.png.json" },
@@ -22,6 +27,13 @@ export default function PhotoStripComposer() {
   }
 
   const [selectedCategory, setSelectedCategory] = useState("3x")
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.addEventListener('mouseleave', handleMouseUp)
+    return () => canvas.removeEventListener('mouseleave', handleMouseUp)
+  }, [])
 
 
   useEffect(() => { 
@@ -38,7 +50,14 @@ export default function PhotoStripComposer() {
         .then(res => res.json())
         .then(data => {
           setCanvasSize(data.size);
-          setSlots(data.slots);
+          setSlots(data.slots.map(s => ({
+            ...s,
+            img: null,
+            imgSrc: null,
+            offsetX: 0,
+            offsetY: 0,
+            scale: 1
+          })));
         });
       }
     } 
@@ -92,7 +111,7 @@ export default function PhotoStripComposer() {
             }
           }
           // abaikan region kecil (noise)
-          if (maxX - minX > 100 && maxY - minY > 100) {
+          if (maxX - minX > 900 && maxY - minY > 900) {
             regions.push({
               x: minX,
               y: minY,
@@ -104,12 +123,156 @@ export default function PhotoStripComposer() {
       }
     }
 
-    setSlots(regions)
+    setSlots(regions.map(r => ({
+      ...r,
+      img: null,
+      imgSrc: null,
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1
+    })))
   }
 
   useEffect(() => {
     renderCanvas()
   }, [frameImg, slots])
+
+function handleMouseDown(e) {
+  const rect = e.target.getBoundingClientRect()
+  
+  // ⭐ Dapatkan ukuran internal kanvas (berdasarkan props)
+  const canvas = canvasRef.current
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  
+  // ⭐ Terapkan faktor skala pada koordinat mouse
+  const x = (e.clientX - rect.left) * scaleX
+  const y = (e.clientY - rect.top) * scaleY
+
+  // cari slot yang diklik
+  const clickedIndex = slots.findIndex(
+    s => x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h
+  )
+
+  if (clickedIndex === -1) return 
+
+  setActiveSlotIndex(clickedIndex) 
+  setIsDragging(true)
+  setLastMouse({ x, y })
+}
+
+function handleMouseMove(e) {
+  if (!isDragging || activeSlotIndex === null) return
+
+  const rect = e.target.getBoundingClientRect()
+  
+  // Dapatkan faktor skala kanvas untuk perhitungan mouse
+  const canvas = canvasRef.current
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+
+  // Terapkan faktor skala pada koordinat mouse
+  const x = (e.clientX - rect.left) * scaleX
+  const y = (e.clientY - rect.top) * scaleY
+  
+  const dx = x - lastMouse.x
+  const dy = y - lastMouse.y
+  setLastMouse({ x, y })
+
+  setSlots(prev => {
+    const updated = [...prev]
+    const s = { ...updated[activeSlotIndex] }
+    
+    // --- START: Logika Batasan (Clamping) Baru ---
+    if (s.img) {
+      // 1. Hitung dimensi gambar yang diskalakan
+      const scaledWidth = s.img.width * s.scale
+      const scaledHeight = s.img.height * s.scale
+
+      // Pastikan gambar cukup besar untuk menutupi slot agar logika batasan berfungsi
+      // Logika ini hanya relevan jika gambar telah di-zoom untuk menutupi (scaledWidth >= s.w dan scaledHeight >= s.h)
+      if (scaledWidth >= s.w && scaledHeight >= s.h) {
+
+        // 2. Tentukan batas geser horizontal (X)
+        const maxOffsetX = (scaledWidth - s.w) / 2
+        const minOffsetX = -maxOffsetX
+        
+        // 3. Tentukan batas geser vertikal (Y)
+        const maxOffsetY = (scaledHeight - s.h) / 2
+        const minOffsetY = -maxOffsetY
+        
+        // 4. Terapkan pergerakan (dx, dy)
+        let newOffsetX = s.offsetX + dx
+        let newOffsetY = s.offsetY + dy
+        
+        // 5. Terapkan Batasan (Clamping)
+        // Gunakan Math.max dan Math.min untuk memastikan offset tidak keluar batas
+        s.offsetX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX))
+        s.offsetY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY))
+      } 
+      // JIKA gambar lebih kecil dari slot di salah satu dimensi, kita bisa membiarkannya
+      // tetap di tengah (offsetX dan offsetY tetap 0) atau menggunakan logika 'Contain'
+      // Namun, jika Anda menggunakan skala 'Cover' (seperti yang disarankan sebelumnya),
+      // kondisi 'if' ini seharusnya selalu terpenuhi.
+    }
+    // --- END: Logika Batasan (Clamping) Baru ---
+
+    updated[activeSlotIndex] = s
+    return updated
+  })
+}
+
+function handleMouseUp() {
+  setIsDragging(false)
+}
+
+function handleWheel(e) {
+  e.preventDefault()
+  if (activeSlotIndex === null) return
+
+  const zoom = e.deltaY < 0 ? 1.05 : 0.95
+
+  setSlots(prev => {
+    const updated = [...prev]
+    const s = { ...updated[activeSlotIndex] }
+    
+    // ⭐ START: Logika Batasan Zoom Out ⭐
+    if (s.img) {
+      // 1. Hitung skala minimum (Skala "Cover")
+      const scaleX = s.w / s.img.width
+      const scaleY = s.h / s.img.height
+      const minScale = Math.max(scaleX, scaleY) // Skala terbesar = skala cover
+
+      // 2. Hitung skala baru yang diinginkan
+      let newScale = s.scale * zoom
+      
+      // 3. Terapkan Batasan (Clamp)
+      // s.scale harus minimal seukuran minScale (agar slot tertutup)
+      newScale = Math.max(minScale, newScale)
+
+      // Juga pertahankan batas zoom in maksimum (misalnya 3x)
+      s.scale = Math.min(3, newScale)
+      
+      // ⭐ 4. Pastikan posisi gambar tetap di tengah jika mencapai batas minScale
+      // Ini sangat penting agar gambar tidak bergeser aneh saat mencapai batas zoom out.
+      if (s.scale === minScale) {
+        // Hitung ulang offset untuk menengahkan gambar pada skala minimum
+        const scaledWidth = s.img.width * minScale;
+        const scaledHeight = s.img.height * minScale;
+        s.offsetX = (s.w - scaledWidth) / 2;
+        s.offsetY = (s.h - scaledHeight) / 2;
+      }
+
+    } else {
+      // Jika tidak ada gambar, tetap gunakan logika zoom standar jika ada
+      s.scale = Math.max(0.3, Math.min(3, s.scale * zoom))
+    }
+    // ⭐ END: Logika Batasan Zoom Out ⭐
+
+    updated[activeSlotIndex] = s
+    return updated
+  })
+}
 
   function renderCanvas() {
     const canvas = canvasRef.current
@@ -120,7 +283,18 @@ export default function PhotoStripComposer() {
     // gambar slot (foto di bawah frame)
     slots.forEach((s) => {
       if (s.img) {
-        drawImageCover(ctx, s.img, s.x, s.y, s.w, s.h)
+        const cx = s.x + s.w / 2 + s.offsetX
+        const cy = s.y + s.h / 2 + s.offsetY
+        const iw = s.img.width * s.scale
+        const ih = s.img.height * s.scale
+        const sx = cx - iw / 2
+        const sy = cy - ih / 2
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(s.x, s.y, s.w, s.h)
+        ctx.clip()
+        ctx.drawImage(s.img, sx, sy, iw, ih)
+        ctx.restore()
       } else {
         ctx.strokeStyle = '#0af'
         ctx.lineWidth = 2
@@ -140,57 +314,70 @@ export default function PhotoStripComposer() {
   }
 
   function handleSlotImageUpload(e, index) {
-    const file = e.target.files[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      setSlots((prev) => {
-        const updated = [...prev]
-        updated[index] = { ...updated[index], imgSrc: url, img }
-        return updated
-      })
-    }
-    img.src = url
-  }
+    const file = e.target.files[0]
+    if (!file) return
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      setSlots((prev) => {
+        const updated = [...prev]
+        const slot = updated[index];
+        // ⭐ PERHITUNGAN BARU: Skala agar tinggi foto sama dengan tinggi slot
+        // Gunakan Math.min agar gambar selalu terlihat (jika foto lebih kecil dari slot)
+        // atau Math.max jika Anda ingin foto pasti memenuhi slot (menutup area)
+        const newScale = slot.h / img.height; // Skala yang diperlukan agar tinggi foto = tinggi slot
 
-  function handleSlotImageUploadAll(e) {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
+        updated[index] = {
+          ...slot, // Gunakan slot yang sudah ada (updated[index])
+          imgSrc: url,
+          img,
+          offsetX: 0,
+          offsetY: 0,
+          scale: newScale // ⭐ Terapkan skala yang sudah dihitung
+        }
+        return updated
+      })
+      setActiveSlotIndex(index)
+    }
+    img.src = url
+  }
 
-  files.forEach((file, index) => {
-    if (index >= slots.length) return; // pastikan tidak melebihi jumlah slot
+function handleSlotImageUploadAll(e) {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
 
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      setSlots(prev => {
-        const updated = [...prev];
-        const slot = updated[index];
+    files.forEach((file, index) => {
+      if (index >= slots.length) return;
 
-        // buat canvas sementara untuk crop otomatis
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = slot.w;
-        tempCanvas.height = slot.h;
-        const tempCtx = tempCanvas.getContext('2d');
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        setSlots(prev => {
+          const updated = [...prev];
+          const slot = updated[index]; // Dapatkan data slot
+          
+          // ⭐ PERHITUNGAN BARU
+          const newScale = slot.h / img.height; // Skala agar tinggi foto = tinggi slot
 
-        // draw gambar dengan cover agar memenuhi slot
-        drawImageCover(tempCtx, img, 0, 0, slot.w, slot.h);
-
-        // simpan hasil crop sebagai image baru
-        const croppedImg = new Image();
-        croppedImg.src = tempCanvas.toDataURL('image/png');
-
-        updated[index] = { ...slot, img: croppedImg, imgSrc: url };
-        return updated;
-      });
-    };
-    img.src = url;
-  });
-}
-
+          updated[index] = { 
+            ...slot, 
+            imgSrc: url, 
+            img, 
+            offsetX: 0, 
+            offsetY: 0, 
+            scale: newScale // ⭐ Terapkan skala yang sudah dihitung
+          };
+          return updated;
+        });
+        if (index === files.length - 1) { 
+          setActiveSlotIndex(index);
+        }
+      };
+      img.src = url;
+    });
+  }
 
   function downloadComposite() {
     const canvas = canvasRef.current;
@@ -247,17 +434,23 @@ export default function PhotoStripComposer() {
           <h1 className=''>Photobooth Mabim</h1>
         </div>
         <div className='flex justify-center'>
-          <canvas
-            ref={canvasRef}
-            width={canvasSize.w}
-            height={canvasSize.h}
-            style={{
-              width: '20%',
-              height: 'auto',
-              justifyItems: 'center', 
-              paddingBottom: '50px'         
-            }}
-          />          
+<canvas
+  ref={canvasRef}
+  width={canvasSize.w}
+  height={canvasSize.h}
+  onMouseDown={handleMouseDown}
+  onMouseMove={handleMouseMove}
+  onMouseUp={handleMouseUp}
+  onWheel={handleWheel}
+  style={{
+    width: '40%',
+    height: 'auto',
+    justifyItems: 'center', 
+    paddingBottom: '50px',
+    cursor: isDragging ? 'grabbing' : 'grab'
+  }}
+/>
+       
         </div>
       </div>
       
@@ -305,12 +498,71 @@ export default function PhotoStripComposer() {
         <div className=' bg-white text-black p-5 rounded-xl'>
           <h3 className='text-2xl font-bold'>Upload Photo</h3>
           {slots.map((s, i) => (
-            <div key={i} className='text-xl'>
-              Slot {i + 1} ({Math.round(s.x)},{Math.round(s.y)})
-              <input className="cursor-pointer text-xl" type="file" multiple accept="image/*" onChange={(e) => handleSlotImageUpload(e, i)} />
+  <div
+    key={i}
+    className={`text-xl border-2 border-dashed rounded-lg p-4 mb-4 transition-colors relative ${
+      activeSlotIndex === i ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+    }`}
+    onClick={() => setActiveSlotIndex(i)}
+    onDragOver={(e) => e.preventDefault()}
+    onDragEnter={() => setActiveSlotIndex(i)}
+    onDragLeave={() => setActiveSlotIndex(null)}
+    onDrop={(e) => {
+      e.preventDefault();
+      setActiveSlotIndex(null);
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const fakeEvent = { target: { files: [file] } };
+        handleSlotImageUpload(fakeEvent, i);
+      }
+    }}
+  >
+    <p className="font-semibold mb-2">
+      Slot {i + 1} ({Math.round(s.x)}, {Math.round(s.y)})
+    </p>
 
-            </div>
-          ))}
+    {/* Preview foto */}
+    {s.imgSrc ? (
+      <div className="relative mb-2">
+        <img
+          src={s.imgSrc}
+          alt={`Slot ${i + 1}`}
+          className="w-full rounded-lg border border-gray-200"
+        />
+        <button
+          onClick={() => {
+            setSlots((prev) => {
+              const updated = [...prev];
+              updated[i] = { ...updated[i], img: null, imgSrc: null };
+              return updated;
+            });
+          }}
+          className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center hover:bg-red-700 transition"
+          title="Hapus foto"
+        >
+          ✕
+        </button>
+      </div>
+    ) : (
+      <p className="text-gray-500 italic mb-2">Belum ada foto</p>
+    )}
+
+    {/* Upload manual */}
+    <input
+      className="cursor-pointer text-base"
+      type="file"
+      accept="image/*"
+      onChange={(e) => handleSlotImageUpload(e, i)}
+    />
+
+    {/* Petunjuk drag & drop */}
+    <p className="text-sm text-gray-400 mt-1">
+      Drag & drop gambar ke area ini untuk upload cepat
+    </p>
+  </div>
+))}
+
+
         </div>
       </div>
     </div>
