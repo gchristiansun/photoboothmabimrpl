@@ -18,7 +18,7 @@ export default function PhotoStripComposer() {
   const frameCategories = {
     "3x": [
       { name: "Frame 3x - 1", src: "3x/frame3x-1.png", json: "3x/frame3x-1.png.json" },
-      { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-1.png.json" },
+      { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-2.png.json" },
       
     ],
     "6x": [
