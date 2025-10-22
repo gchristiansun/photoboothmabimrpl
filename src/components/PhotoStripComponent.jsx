@@ -18,7 +18,7 @@ export default function PhotoStripComposer() {
   const frameCategories = {
     "3x": [
       { name: "Frame 3x - 1", src: "3x/frame3x-1.png", json: "3x/frame3x-1.png.json" },
-      { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-2.png.json" },
+      { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-1.png.json" },
       
     ],
     "6x": [
@@ -111,7 +111,7 @@ export default function PhotoStripComposer() {
             }
           }
           // abaikan region kecil (noise)
-          if (maxX - minX > 900 && maxY - minY > 900) {
+          if (maxX - minX > 10 && maxY - minY > 10) {
             regions.push({
               x: minX,
               y: minY,
