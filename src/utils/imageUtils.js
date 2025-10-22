@@ -1,12 +1,13 @@
-export function drawImageCover(ctx, img, x, y, w, h) {
+export function drawImageCover(ctx, img, x, y, w, h, scale = 1) {
   const expand = 2
-  const imgRatio = img.width / img.height
+  
+  // Gunakan scale untuk hitung ukuran gambar
+  const drawWidth = img.width * scale
+  const drawHeight = img.height * scale
 
-  const drawHeight = h + expand * 2
-  const drawWidth = img.width * ((h + expand * 2) / img.height)
-
+  // Posisikan gambar di tengah slot
   const offsetX = x + (w - drawWidth) / 2
-  const offsetY = y - expand 
+  const offsetY = y + (h - drawHeight) / 2
 
   ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight)
 }

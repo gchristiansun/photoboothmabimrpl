@@ -66,72 +66,84 @@ export default function PhotoStripComposer() {
   )
 
   function detectTransparentAreas(img) {
-    const tempCanvas = document.createElement('canvas')
-    const ctx = tempCanvas.getContext('2d')
-    tempCanvas.width = img.width
-    tempCanvas.height = img.height
-    ctx.drawImage(img, 0, 0)
+  const tempCanvas = document.createElement('canvas')
+  const ctx = tempCanvas.getContext('2d')
+  tempCanvas.width = img.width
+  tempCanvas.height = img.height
+  ctx.drawImage(img, 0, 0)
 
-    const imgData = ctx.getImageData(0, 0, img.width, img.height)
-    const { data } = imgData
+  const imgData = ctx.getImageData(0, 0, img.width, img.height)
+  const { data } = imgData
 
-    let regions = []
-    let visited = new Uint8Array(img.width * img.height)
-    const getIndex = (x, y) => y * img.width + x
+  let regions = []
+  let visited = new Uint8Array(img.width * img.height)
+  const getIndex = (x, y) => y * img.width + x
 
-    for (let y = 0; y < img.height; y++) {
-      for (let x = 0; x < img.width; x++) {
-        const idx = getIndex(x, y)
-        if (visited[idx]) continue
-        const alpha = data[idx * 4 + 3]
-        if (alpha < 10) {
-          // mulai region transparan
-          let minX = x, maxX = x, minY = y, maxY = y
-          let stack = [[x, y]]
-          visited[idx] = 1
-          while (stack.length) {
-            const [cx, cy] = stack.pop()
-            const ci = getIndex(cx, cy)
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                const nx = cx + dx, ny = cy + dy
-                if (nx < 0 || ny < 0 || nx >= img.width || ny >= img.height) continue
-                const ni = getIndex(nx, ny)
-                if (visited[ni]) continue
-                const a = data[ni * 4 + 3]
-                if (a < 10) {
-                  visited[ni] = 1
-                  stack.push([nx, ny])
-                  minX = Math.min(minX, nx)
-                  maxX = Math.max(maxX, nx)
-                  minY = Math.min(minY, ny)
-                  maxY = Math.max(maxY, ny)
-                }
+  for (let y = 0; y < img.height; y++) {
+    for (let x = 0; x < img.width; x++) {
+      const idx = getIndex(x, y)
+      if (visited[idx]) continue
+      const alpha = data[idx * 4 + 3]
+      if (alpha < 10) {
+        // mulai region transparan
+        let minX = x, maxX = x, minY = y, maxY = y
+        let stack = [[x, y]]
+        visited[idx] = 1
+
+        while (stack.length) {
+          const [cx, cy] = stack.pop()
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = cx + dx, ny = cy + dy
+              if (nx < 0 || ny < 0 || nx >= img.width || ny >= img.height) continue
+              const ni = getIndex(nx, ny)
+              if (visited[ni]) continue
+              const a = data[ni * 4 + 3]
+              if (a < 10) {
+                visited[ni] = 1
+                stack.push([nx, ny])
+                minX = Math.min(minX, nx)
+                maxX = Math.max(maxX, nx)
+                minY = Math.min(minY, ny)
+                maxY = Math.max(maxY, ny)
               }
             }
           }
-          // abaikan region kecil (noise)
-          if (maxX - minX > 10 && maxY - minY > 10) {
-            regions.push({
-              x: minX,
-              y: minY,
-              w: maxX - minX,
-              h: maxY - minY,
-            })
-          }
+        }
+
+        // abaikan region kecil (noise)
+        if (maxX - minX > 900 && maxY - minY > 900) {
+          // tambahkan padding di sekitar slot biar lebih lebar dan tinggi
+          const paddingX = 50 // bisa ubah sesuai kebutuhan
+          const paddingY = 25 // bisa ubah sesuai kebutuhan
+
+          minX = Math.max(0, minX - paddingX)
+          maxX = Math.min(img.width + 50, maxX + paddingX)
+          minY = Math.max(0, minY - paddingY)
+          maxY = Math.min(img.height, maxY + paddingY)
+
+          regions.push({
+            x: minX,
+            y: minY,
+            w: (maxX - minX) + 20,
+            h: maxY - minY,
+          })
         }
       }
     }
-
-    setSlots(regions.map(r => ({
-      ...r,
-      img: null,
-      imgSrc: null,
-      offsetX: 0,
-      offsetY: 0,
-      scale: 1
-    })))
   }
+
+  // set hasil slot ke state
+  setSlots(regions.map(r => ({
+    ...r,
+    img: null,
+    imgSrc: null,
+    offsetX: 0,
+    offsetY: 0,
+    scale: 1
+  })))
+}
+
 
   useEffect(() => {
     renderCanvas()
@@ -314,34 +326,44 @@ function handleWheel(e) {
   }
 
   function handleSlotImageUpload(e, index) {
-    const file = e.target.files[0]
-    if (!file) return
-    const url = URL.createObjectURL(file)
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      setSlots((prev) => {
-        const updated = [...prev]
-        const slot = updated[index];
-        // ⭐ PERHITUNGAN BARU: Skala agar tinggi foto sama dengan tinggi slot
-        // Gunakan Math.min agar gambar selalu terlihat (jika foto lebih kecil dari slot)
-        // atau Math.max jika Anda ingin foto pasti memenuhi slot (menutup area)
-        const newScale = slot.h / img.height; // Skala yang diperlukan agar tinggi foto = tinggi slot
+  const file = e.target.files[0]
+  if (!file) return
+  const url = URL.createObjectURL(file)
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
 
-        updated[index] = {
-          ...slot, // Gunakan slot yang sudah ada (updated[index])
-          imgSrc: url,
-          img,
-          offsetX: 0,
-          offsetY: 0,
-          scale: newScale // ⭐ Terapkan skala yang sudah dihitung
-        }
-        return updated
-      })
-      setActiveSlotIndex(index)
-    }
-    img.src = url
-  }
+  img.onload = () => {
+    setSlots(prev => {
+      const updated = [...prev]
+      const slot = updated[index]
+
+      // Hitung rasio lebar dan tinggi
+      const scaleByHeight = slot.h / img.height
+      const scaleByWidth = slot.w / img.width
+
+      // Jika gambar lebih sempit dari slot → gunakan skala lebar
+      // Jika gambar cukup lebar → gunakan skala tinggi
+      // const newScale = img.width < slot.w ? scaleByWidth : scaleByHeight
+      const newScale = Math.max(scaleByWidth, scaleByHeight)
+
+
+      updated[index] = {
+        ...slot,
+        imgSrc: url,
+        img,
+        offsetX: 0,
+        offsetY: 0,
+        scale: newScale,
+      }
+
+      return updated
+    })
+    setActiveSlotIndex(index)
+  }
+
+  img.src = url
+}
+
 
 function handleSlotImageUploadAll(e) {
     const files = Array.from(e.target.files);
