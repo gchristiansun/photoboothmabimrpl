@@ -22,7 +22,7 @@ export default function PhotoStripComposer() {
       
     ],
     "6x": [
-      { name: "Frame 6x - 1", src: "6x/frame6x-1.png", json: "6x/frame6x-1.png.json" },
+      { name: "Frame 6x - 1", src: "6x/frame6x-1.png", json: "" },
     ],
   }
 
