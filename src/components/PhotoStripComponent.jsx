@@ -19,7 +19,8 @@ export default function PhotoStripComposer() {
     "3x": [
       { name: "Frame 3x - 1", src: "3x/frame3x-1.png", json: "3x/frame3x-1.png.json" },
       { name: "Frame 3x - 2", src: "3x/frame3x-2.png", json: "3x/frame3x-2.png.json" },
-      
+      { name: "Frame 3x - 3", src: "3x/frame3x-3.png", json: "" },
+      { name: "Frame 3x - 4", src: "3x/frame3x-4.png", json: ""},
     ],
     "6x": [
       { name: "Frame 6x - 1", src: "6x/frame6x-1.png", json: "6x/frame6x-1.png.json" },
@@ -114,7 +115,7 @@ export default function PhotoStripComposer() {
         }
 
         // abaikan region kecil (noise)
-        if (maxX - minX > 900 && maxY - minY > 900) {
+        if (maxX - minX > 300 && maxY - minY > 300) {
           // tambahkan padding di sekitar slot biar lebih lebar dan tinggi
           const paddingX = 50 // bisa ubah sesuai kebutuhan
           const paddingY = 25 // bisa ubah sesuai kebutuhan
